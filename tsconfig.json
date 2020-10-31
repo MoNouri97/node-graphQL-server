@@ -1,8 +1,8 @@
 {
 	"compilerOptions": {
-		"target": "es2018",
+		"target": "es5",
 		"module": "commonjs",
-		"lib": ["dom", "es6", "es2018", "esnext.asynciterable"],
+		"lib": ["dom", "es6", "es2017", "esnext.asynciterable"],
 		"sourceMap": true,
 		"outDir": "./dist",
 		"moduleResolution": "node",
@@ -19,8 +19,9 @@
 		"esModuleInterop": true,
 		"emitDecoratorMetadata": true,
 		"experimentalDecorators": true,
-		"resolveJsonModule": true,
-		"baseUrl": "."
+		"resolveJsonModule": true
+		// "baseUrl": "."
+		// "baseUrl": "."
 	},
 	"exclude": ["node_modules"],
 	"include": ["./src/**/*.tsx", "./src/**/*.ts"]
