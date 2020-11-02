@@ -11,7 +11,6 @@ import {
 import { User } from '../entities/User';
 import { MyContext } from '../types';
 import argon2 from 'argon2';
-import { EntityManager } from '@mikro-orm/postgresql';
 
 @InputType()
 class UsernamePasswordInput {
@@ -84,6 +83,7 @@ export class UserResolver {
 		try {
 			await em.persistAndFlush(user);
 			// using query builder :
+			// import { EntityManager } from '@mikro-orm/postgresql';
 			// const result = await (em as EntityManager)
 			// 	.createQueryBuilder(User)
 			// 	.getKnexQuery()
