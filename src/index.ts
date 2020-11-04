@@ -46,7 +46,6 @@ const main = async () => {
 			saveUninitialized: false,
 		}),
 	);
-	console.log({ __prod__ });
 
 	// apollo
 	const apolloServer = new ApolloServer({
@@ -62,6 +61,7 @@ const main = async () => {
 	});
 
 	app.listen(4000, () => {
+		console.log({ __prod__ });
 		console.log('server started on port 4000');
 	});
 };

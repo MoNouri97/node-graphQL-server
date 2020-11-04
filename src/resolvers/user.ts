@@ -2,7 +2,6 @@ import {
 	Arg,
 	Ctx,
 	Field,
-	InputType,
 	Mutation,
 	ObjectType,
 	Query,
@@ -12,14 +11,8 @@ import { User } from '../entities/User';
 import { MyContext } from '../types';
 import argon2 from 'argon2';
 import { COOKIE_NAME } from '../constants';
-
-@InputType()
-class UsernamePasswordInput {
-	@Field()
-	username: string;
-	@Field()
-	password: string;
-}
+import { RegisterInput, LoginInput } from './types';
+import { validateRegister } from '../utils/validateRegister';
 
 @ObjectType()
 class FieldError {
@@ -32,7 +25,7 @@ class FieldError {
 @ObjectType()
 class UserResponse {
 	@Field(() => [FieldError], { nullable: true })
-	errors?: [FieldError];
+	errors?: FieldError[];
 	@Field(() => User, { nullable: true })
 	user?: User;
 }
@@ -51,35 +44,21 @@ export class UserResolver {
 	@Mutation(() => UserResponse)
 	async register(
 		@Ctx() { em, req }: MyContext,
-		@Arg('option') { password, username }: UsernamePasswordInput,
+		@Arg('option') { password, username, email }: RegisterInput,
 	): Promise<UserResponse> {
 		// validation
-		if (username.length < 3) {
+		const errors = validateRegister({ password, username, email });
+		if (errors) {
 			return {
-				errors: [
-					{
-						field: 'username',
-						message: 'must contain at least 3 characters',
-					},
-				],
+				errors: errors,
 			};
 		}
-		if (password.length < 3) {
-			return {
-				errors: [
-					{
-						field: 'password',
-						message: 'must contain at least 3 characters',
-					},
-				],
-			};
-		}
-
 		// hashing pw & saving user
 		const hashed = await argon2.hash(password);
 		const user = await em.create(User, {
-			username: username,
+			username,
 			password: hashed,
+			email,
 		});
 		try {
 			await em.persistAndFlush(user);
@@ -97,15 +76,22 @@ export class UserResolver {
 			// 	.returning('*');
 		} catch (error) {
 			const detail: string = error.detail;
-			if (detail.includes('already exists'))
-				return {
-					errors: [
-						{
+			console.log(error);
+
+			if (detail.includes('already exists')) {
+				const err: FieldError = detail.includes('email')
+					? {
+							field: 'email',
+							message: 'an account with this email already exists',
+					  }
+					: {
 							field: 'username',
 							message: 'username already taken',
-						},
-					],
+					  };
+				return {
+					errors: [err],
 				};
+			}
 		}
 
 		req.session!.userId = user.id;
@@ -118,39 +104,24 @@ export class UserResolver {
 	@Mutation(() => UserResponse)
 	async login(
 		@Ctx() { em, req }: MyContext,
-		@Arg('option') { password, username }: UsernamePasswordInput,
+		@Arg('option') { password, usernameOrEmail }: LoginInput,
 	): Promise<UserResponse> {
-		// validation
-		if (username.length < 3) {
-			return {
-				errors: [
-					{
-						field: 'username',
-						message: 'must contain at least 3 characters',
-					},
-				],
-			};
-		}
-		if (password.length < 3) {
-			return {
-				errors: [
-					{
-						field: 'password',
-						message: 'must contain at least 3 characters',
-					},
-				],
-			};
-		}
+		const user = await em.findOne(
+			User,
+			usernameOrEmail.includes('@')
+				? {
+						email: usernameOrEmail,
+				  }
+				: {
+						username: usernameOrEmail,
+				  },
+		);
 
-		// hashing pw & saving user
-		const user = await em.findOne(User, {
-			username: username,
-		});
 		if (!user) {
 			return {
 				errors: [
 					{
-						field: 'username',
+						field: 'usernameOrEmail',
 						message: 'user does not exist',
 					},
 				],
@@ -186,4 +157,12 @@ export class UserResolver {
 			}),
 		);
 	}
+
+	// @Mutation(() => Boolean)
+	// async forgotPassword(@Arg('email') email: string, @Ctx() { em }: MyContext) {
+	// 	const user = em.findOne(User, { email });
+	// 	if (!user) return false;
+
+	// 	return true;
+	// }
 }
