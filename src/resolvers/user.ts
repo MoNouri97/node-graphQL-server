@@ -96,15 +96,15 @@ export class UserResolver {
 		@Ctx() { req }: MyContext,
 		@Arg('option') { password, usernameOrEmail }: LoginInput,
 	): Promise<UserResponse> {
-		const user = await User.findOne(
-			usernameOrEmail.includes('@')
+		const user = await User.findOne({
+			where: usernameOrEmail.includes('@')
 				? {
 						email: usernameOrEmail,
 				  }
 				: {
 						username: usernameOrEmail,
 				  },
-		);
+		});
 
 		if (!user) {
 			return {
@@ -152,7 +152,7 @@ export class UserResolver {
 		@Arg('email') email: string,
 		@Ctx() { redis }: MyContext,
 	) {
-		const user = await User.findOne({ email });
+		const user = await User.findOne({ where: { email } });
 
 		if (!user) return true;
 
