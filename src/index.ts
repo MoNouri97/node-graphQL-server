@@ -13,19 +13,23 @@ import { MyContext } from './types';
 import { createConnection } from 'typeorm';
 import { Post } from './entities/Post';
 import { User } from './entities/User';
+import path from 'path';
 const RedisStore = connectRedis(session);
 const redis = new Redis();
 
 const main = async () => {
-	const conn = createConnection({
+	const conn = await createConnection({
 		database: 'lireddit2',
 		type: 'postgres',
 		username: 'postgres',
 		password: 'postgres',
 		logging: true,
 		synchronize: true,
+		migrations: [path.join(__dirname, './migrations/*')],
 		entities: [Post, User],
 	});
+	await conn.runMigrations();
+	// Post.delete({});
 
 	const app = express();
 

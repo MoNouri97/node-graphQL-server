@@ -1,21 +1,52 @@
+import { limits } from 'argon2';
 import {
 	Arg,
 	Ctx,
+	FieldResolver,
+	Int,
 	Mutation,
 	Query,
 	Resolver,
+	Root,
 	UseMiddleware,
 } from 'type-graphql';
+import { getConnection } from 'typeorm';
 import { Post } from '../entities/Post';
 import { isAuth } from '../middleware/isAuth';
 import { MyContext } from '../types';
-import { PostInput } from './types';
+import { PaginatedPosts, PostInput } from './types';
 
-@Resolver()
+@Resolver(Post)
 export class PostResolver {
-	@Query(() => [Post])
-	posts(): Promise<Post[]> {
-		return Post.find();
+	@FieldResolver(() => String)
+	textPreview(@Root() root: Post) {
+		return root.text.slice(0, 50);
+	}
+
+	@Query(() => PaginatedPosts)
+	async posts(
+		@Arg('limit', () => Int) limit: number,
+		@Arg('cursor', () => String, { nullable: true }) cursor: string | null,
+	): Promise<PaginatedPosts> {
+		const realLimit = Math.min(50, limit);
+		const realLimitPlusOne = realLimit + 1;
+		const query = await getConnection()
+			.getRepository(Post)
+			.createQueryBuilder('p')
+			// double quote or else createdAt becomes createdat and causes a postgresql error
+			.orderBy('"createdAt"', 'DESC')
+			.take(realLimitPlusOne);
+
+		if (cursor)
+			query.where('"createdAt" < :cursor', {
+				cursor: new Date(parseInt(cursor)),
+			});
+
+		const posts = await query.getMany();
+		return {
+			posts: posts.slice(0, realLimit),
+			hasMore: posts.length === realLimitPlusOne,
+		};
 	}
 
 	@Query(() => Post, { nullable: true })
