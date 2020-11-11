@@ -30,19 +30,41 @@ export class PostResolver {
 	): Promise<PaginatedPosts> {
 		const realLimit = Math.min(50, limit);
 		const realLimitPlusOne = realLimit + 1;
-		const query = await getConnection()
-			.getRepository(Post)
-			.createQueryBuilder('p')
-			// double quote or else createdAt becomes createdat and causes a postgresql error
-			.orderBy('"createdAt"', 'DESC')
-			.take(realLimitPlusOne);
 
-		if (cursor)
-			query.where('"createdAt" < :cursor', {
-				cursor: new Date(parseInt(cursor)),
-			});
+		const replacements: any[] = [realLimitPlusOne];
+		if (cursor) replacements.push(new Date(parseInt(cursor)));
 
-		const posts = await query.getMany();
+		const posts = await getConnection().query(
+			`select p.*, 
+			json_build_object(
+				'id',u.id,
+				'username',u.username,
+				'email',u.email,
+				'updatedAt',u."updatedAt",
+				'createdAt',u."createdAt") creator 
+			from post p
+			INNER JOIN public.user u ON p."creatorId" = u.id
+			${cursor ? 'where p."createdAt" < $2 ' : ''}
+			order by p."createdAt" DESC
+			limit $1
+			`,
+			replacements,
+		);
+
+		// const query = await getConnection()
+		// 	.getRepository(Post)
+		// 	.createQueryBuilder('p')
+		// 	.innerJoinAndSelect('p.creator', 'u', 'u.id = p."creatorId"')
+		// 	// double quote or else createdAt becomes createdat and causes a postgresql error
+		// 	.orderBy('p."createdAt"', 'DESC')
+		// 	.take(realLimitPlusOne);
+
+		// if (cursor)
+		// 	query.where('p."createdAt" < :cursor', {
+		// 		cursor: new Date(parseInt(cursor)),
+		// 	});
+
+		// const posts = await query.getMany();
 		return {
 			posts: posts.slice(0, realLimit),
 			hasMore: posts.length === realLimitPlusOne,
