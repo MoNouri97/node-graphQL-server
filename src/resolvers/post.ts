@@ -12,6 +12,7 @@ import {
 } from 'type-graphql';
 import { getConnection } from 'typeorm';
 import { Post } from '../entities/Post';
+import { Vote } from '../entities/Vote';
 import { isAuth } from '../middleware/isAuth';
 import { MyContext } from '../types';
 import { PaginatedPosts, PostInput } from './types';
@@ -23,17 +24,84 @@ export class PostResolver {
 		return root.text.slice(0, 50);
 	}
 
+	@Mutation(() => Boolean)
+	@UseMiddleware(isAuth)
+	async vote(
+		@Arg('postId', () => Int) postId: number,
+		@Arg('value', () => Int) value: number,
+		@Ctx() { req }: MyContext,
+	) {
+		const { userId } = req.session!;
+		const isUpVote = value != -1;
+		const realValue = isUpVote ? 1 : -1;
+		const vote = await Vote.findOne({ where: { postId, userId } });
+		console.log({ value, realValue, vote });
+
+		// already voted , same vote
+		if (vote && vote.value == realValue) {
+			return true;
+		}
+		// new vote
+		if (!vote) {
+			await getConnection().transaction(async em => {
+				em.query(
+					`
+				INSERT INTO vote("userId","postId",value)
+				VALUES($1,$2,$3)
+				`,
+					[userId, postId, realValue],
+				);
+				em.query(
+					`
+				UPDATE post
+				SET points = points + $1
+				WHERE id = $2 
+				`,
+					[realValue, postId],
+				);
+			});
+			return true;
+		}
+		// changing votes
+		await getConnection().transaction(async em => {
+			em.query(
+				`
+				UPDATE vote
+				SET value = $1
+				WHERE "postId"=$2 AND "userId"=$3
+			`,
+				[realValue, postId, userId],
+			);
+
+			em.query(
+				`
+			UPDATE post
+			SET points = points + $1
+			WHERE id = $2 
+			`,
+				[2 * realValue, postId],
+			);
+		});
+		return true;
+	}
+
 	@Query(() => PaginatedPosts)
 	async posts(
+		@Ctx() { req }: MyContext,
 		@Arg('limit', () => Int) limit: number,
 		@Arg('cursor', () => String, { nullable: true }) cursor: string | null,
 	): Promise<PaginatedPosts> {
+		const { userId } = req.session!;
 		const realLimit = Math.min(50, limit);
 		const realLimitPlusOne = realLimit + 1;
 
 		const replacements: any[] = [realLimitPlusOne];
-		if (cursor) replacements.push(new Date(parseInt(cursor)));
-
+		if (userId) replacements.push(userId);
+		let cursorIdx = 2;
+		if (cursor) {
+			replacements.push(new Date(parseInt(cursor)));
+			cursorIdx = replacements.length;
+		}
 		const posts = await getConnection().query(
 			`select p.*, 
 			json_build_object(
@@ -41,10 +109,15 @@ export class PostResolver {
 				'username',u.username,
 				'email',u.email,
 				'updatedAt',u."updatedAt",
-				'createdAt',u."createdAt") creator 
+				'createdAt',u."createdAt") creator ,
+		${
+			userId
+				? '(select v.value from vote v where "userId"=$2 and "postId"=p.id) '
+				: 'null as'
+		}	"voteStatus"
 			from post p
 			INNER JOIN public.user u ON p."creatorId" = u.id
-			${cursor ? 'where p."createdAt" < $2 ' : ''}
+			${cursor ? `where p."createdAt" < $${cursorIdx}` : ''}
 			order by p."createdAt" DESC
 			limit $1
 			`,

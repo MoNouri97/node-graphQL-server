@@ -1,14 +1,15 @@
 import { Field, ObjectType } from 'type-graphql';
 import {
-	Entity,
+	BaseEntity,
 	Column,
+	CreateDateColumn,
+	Entity,
+	OneToMany,
 	PrimaryGeneratedColumn,
 	UpdateDateColumn,
-	CreateDateColumn,
-	BaseEntity,
-	OneToMany,
 } from 'typeorm';
 import { Post } from './Post';
+import { Vote } from './Vote';
 
 @ObjectType()
 @Entity()
@@ -28,8 +29,11 @@ export class User extends BaseEntity {
 	@Column()
 	password!: string;
 
-	@OneToMany(() => Post, user => user.creator)
+	@OneToMany(() => Post, post => post.creator)
 	posts: Post[];
+
+	@OneToMany(() => Vote, vote => vote.user)
+	votes: Vote[];
 
 	@Field(() => String)
 	@CreateDateColumn()
