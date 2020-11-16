@@ -12,6 +12,7 @@ import {
 } from 'type-graphql';
 import { getConnection } from 'typeorm';
 import { Post } from '../entities/Post';
+import { User } from '../entities/User';
 import { Vote } from '../entities/Vote';
 import { isAuth } from '../middleware/isAuth';
 import { MyContext } from '../types';
@@ -145,8 +146,8 @@ export class PostResolver {
 	}
 
 	@Query(() => Post, { nullable: true })
-	post(@Arg('id') id: number): Promise<Post | undefined> {
-		return Post.findOne(id);
+	post(@Arg('id', () => Int) id: number): Promise<Post | undefined> {
+		return Post.findOne(id, { relations: ['creator'] });
 	}
 
 	@Mutation(() => Post)
@@ -159,25 +160,34 @@ export class PostResolver {
 	}
 
 	@Mutation(() => Post, { nullable: true })
+	@UseMiddleware(isAuth)
 	async updatePost(
-		@Arg('id') id: number,
-		@Arg('title', { nullable: true }) title: string,
+		@Arg('id', () => Int) id: number,
+		@Arg('title') title: string,
+		@Arg('text') text: string,
+		@Ctx() { req }: MyContext,
 	): Promise<Post | undefined> {
-		let post = await Post.findOne(id);
-
-		if (!post) return undefined;
-
-		// await Post.update({ id }, { title });
-		if (typeof title !== 'undefined') {
-		}
-
-		return post;
+		const result = await getConnection()
+			.createQueryBuilder()
+			.update(Post)
+			.set({ title, text })
+			.where('id = :id and "creatorId" = :creatorId', {
+				id,
+				creatorId: req.session!.userId,
+			})
+			.returning('*')
+			.execute();
+		return result.raw[0];
 	}
 
 	@Mutation(() => Boolean)
-	async deletePost(@Arg('id') id: number): Promise<boolean> {
+	@UseMiddleware(isAuth)
+	async deletePost(
+		@Arg('id', () => Int) id: number,
+		@Ctx() { req }: MyContext,
+	): Promise<boolean> {
 		try {
-			await Post.delete(id);
+			await Post.delete({ id, creatorId: req.session!.userId });
 		} catch (error) {
 			return false;
 		}
